@@ -1,6 +1,6 @@
 #include "server.h"
 
-ssize_t sendn(int fd, char *buf, int size)// -1 代表出错， 不然返回发送的数量
+ssize_t sendn(int fd, char *buf, int size)
 {
 	char *pbuf = buf;
 	int total , nsend;
@@ -20,7 +20,7 @@ ssize_t sendn(int fd, char *buf, int size)// -1 代表出错， 不然返回发�
 	return total;
 } 
 
-ssize_t recvn(int fd, char *buf, int size)// -1 出错，不然代表接受的数量
+ssize_t recvn(int fd, char *buf, int size)
 {
 	char *pbuf = buf;
 	int total , nrecv;
@@ -51,9 +51,14 @@ void taskque_init(ptaskque pq)
 	
 void que_insert_client(pthreadpool pool, pclient pnew)
 {
-	ptaskque pq = &pool->clientque;
 	do
 	{
+	if(&pool->clientque == NULL)
+	{
+		printf("task is null\n");
+		break;
+	}
+	ptaskque pq = &pool->clientque;
 		pthread_mutex_lock(&pq->lock);
 		if(pool->status == 0)
 		{
@@ -77,13 +82,17 @@ void que_insert_client(pthreadpool pool, pclient pnew)
 
 void que_get_client(pthreadpool pool, pclient *pnew)
 {
-	ptaskque pq = &pool->clientque;
 	do
 	{
+	if(&pool->clientque == NULL)
+	{
+		printf("que paq is null\n");
+		break;
+	}
+	ptaskque pq = &pool->clientque;
 		pthread_mutex_lock(&pq->lock);
 		while(pq->tasksize == 0)
 		{
-			//pthread_cond_signal(pool->empty);
 			pthread_cond_wait(&pool->notempty, &pq->lock);
 		}
 		if(pool->status == 0)
@@ -105,36 +114,35 @@ void que_get_client(pthreadpool pool, pclient *pnew)
 	}while(0);
 }
 
-void config_init(pconfig conf)
+void config_init(pconfig* conf)
 {
 	char buf[512];
 	bzero(buf, sizeof(buf));
 	
 	int ret;
-	conf = (pconfig)malloc(sizeof(config));
+	*conf = (pconfig)malloc(sizeof(config));
 	if(NULL == conf)
 	{	
 		printf("config malloc lost");
 		exit(-1);		
 	}
 	
-	int fd = open(conf->logpath, O_RDONLY);
+	int fd = open(LOG_NAME, O_RDONLY);
 	if(fd == -1)
 	{
 		perror("config open lost");
 		exit(-1);	
 	}
 	
-	conf->logfd = fd;
+//	(*conf)->logfd = fd;
 	ret = read(fd, buf, sizeof(buf));
 	if(ret == -1)
 	{
 		perror("config read lost");
 		exit(-1);
 	}
-	//////////////处理结构体
 	char *cur, *pre = buf;
-	char temp[4][128];
+	char temp[4][128] = {0};
 	int i = 0;
 	while(cur != NULL)
 	{
@@ -147,40 +155,40 @@ void config_init(pconfig conf)
 		}
 	}
 	strcpy(temp[i], pre);
-	conf->port = atoi(temp[0]);
-	strcpy(conf->ip,temp[1]);
-	conf->poolsize = atoi(temp[2]);
-	strcpy(conf->logpath, temp[3]);	
+	(*conf)->port = atoi(temp[0]);
+	strcpy((*conf)->ip,temp[1]);
+	(*conf)->poolsize = atoi(temp[2]);
+	printf("config init port :%d ,ip: %s\n", (*conf)->port, (*conf)->ip);
 }
 
-void threadpool_init(pthreadpool pool, int poolsize)//初始化线程池
+void threadpool_init(pthreadpool* pool, int poolsize)//初始化线程池
 {
-	pool = (pthreadpool)malloc(sizeof(threadpool));
-	if(pool == NULL)
+	*pool = (pthreadpool)malloc(sizeof(threadpool));
+	if(*pool == NULL)
 	{
 		printf("pthreadpool malloc lost\n");
 		exit(-1);
 	}
-	pool->pid =(pthread_t*)malloc(poolsize*sizeof(pthread_t));
-	if(pool->pid == NULL)
+	(*pool)->pid =(pthread_t*)malloc(poolsize*sizeof(pthread_t));
+	if((*pool)->pid == NULL)
 	{
 		printf("pthread_t malloc lost\n");
 		exit(-1);
 	}	
-	taskque_init(&pool->clientque);//	
-	pool->poolsize = poolsize;
-	pool->client_handle = thread_server;
-	if(pthread_cond_init(&pool->empty, NULL))
+	taskque_init(&(*pool)->clientque);//	
+	(*pool)->poolsize = poolsize;
+	(*pool)->client_handle = thread_server;
+	if(pthread_cond_init(&(*pool)->empty, NULL))
 	{
 		printf("pthread_cond_init empty lost\n");
 		exit(-1);	
 	}
-	if(pthread_cond_init(&pool->notempty, NULL))
+	if(pthread_cond_init(&(*pool)->notempty, NULL))
 	{
 		printf("pthread_cond_init notempty lost");
 		exit(-1);
 	}	
-	pool->status = 0;
+	(*pool)->status = 0;
 }
 
 void threadpool_start(pthreadpool pool)//开启线程池
@@ -199,20 +207,7 @@ void threadpool_start(pthreadpool pool)//开启线程池
 	printf("--------------pool started now-------------\n");
 }
 
-/*int worklog_init(char *log_name)//初始化工作日志 
-{
-	int fd = open(log_name, O_WRONLY|O_CREAT,0666);
-	if(-1 == fd)
-	{
-		perror("open log lost");
-		return -1;
-	}
-	
-	printf("----------------work log now----------\n");
-	return fd;
-}
-*/
-int tcp_init(const char* ip, int port)//初始化,监听 返回i套接字。
+int tcp_init(const char* ip, int port)
 {
 	int sfd = socket(AF_INET, SOCK_STREAM, 0);
 	if(sfd == -1)
@@ -231,6 +226,7 @@ int tcp_init(const char* ip, int port)//初始化,监听 返回i套接字。
 		close(sfd);
 		return -1;
 	}
+	printf("bind success \n");
 	if(listen(sfd, LISTENNUM) == -1)
 	{
 		perror("tcp_init socket listen lsot");
@@ -240,7 +236,7 @@ int tcp_init(const char* ip, int port)//初始化,监听 返回i套接字。
 	return sfd;
 } 
 
-int tcp_accept(int sfd, pclient pnew)// 服务端接收
+int tcp_accept(int sfd, pclient pnew)
 {
 	char buf[1024] = {0};
 	struct sockaddr_in clientaddr;
@@ -251,207 +247,142 @@ int tcp_accept(int sfd, pclient pnew)// 服务端接收
 	if(new_fd == -1)
 	{
 		perror("tcp_accept accept lost");
-//		strcpy(buf, "connect");
-//		write_log(buf,FAILED);			
 		close(sfd);
 		return -1;
 	}
 	printf("%s %d success connect ..\n", inet_ntoa(clientaddr.sin_addr), ntohs(clientaddr.sin_port));
-	//char buf[1024]= {0};
-//	strcpy(buf, inet_ntoa(clientadr.sin_addr));
-//	strcat(buf, "connect");
-//	write_log(buf, SUCCESS);////todo 
-//	pnew->port = ntohs(clientaddr.sin_port);
-//	strcpy(pnew->ip, inet_ntoa(clientaddr.sin_addr));
 	pnew->cfd = new_fd;
 
 	return new_fd;
 }
-/*int tcp_connect(const char *ip, int port)//连接套接字
-{
-	int sfd = socket(AF_INET, SOCK_STREAM, 0);
-	if(sfd == -1)
-	{
-		perror("tcp_connect socket lost");
-		return -1;
-	}
-	struct sockaddr_in serveraddr;
-	memset(&serveraddr, 0, sizeof(struct sockaddr));
-	
-	serveraddr.sin_family = AF_INET;
-	serveraddr.sin_port = htons(port);
-	serveraddr.sin_addr.s_addr = inet_addr(ip);
-	if(connect(sfd, (struct sockaddr*)&serveraddr, sizeof(struct sockaddr)) == -1)
-	{
-		perror("tcp_connect lost");
-		close(sfd);
-		return -1;
-	}
-	return sfd;
-}
-*/
-/*void signalhandler(void)
-{
-	sigset_t sigSet;
-	sigemptyset(&sigSet);
-	sigaddset(&sigSet, SIGINT);
-	sigaddset(&sigSet, SIGQUIT);
-	sigprocmask(SIG_BLOCK, &sigSet, NULL);
-}
-*/	
-/*void* CleanFunc(void *args)
-{
-
-
-}
-*/
-void* thread_server(void *args)//服务端线程运行主程序
+void* thread_server(void *args)
 {	
-//	pthread_cleanup_push(CleanFunc, (void *)1);
 	pthreadpool pool = (pthreadpool)args;
 	pclient pget = NULL;
-	int status;
-	
+	int status = 1;
+	int ret;
+
+		char cmdline[300] = {0};	
+		int len;
+		char *cmd;
 	while(1)
 	{
+		if(pool == NULL)
+		{
+			printf("thread_ssrver pool is null\n");
+			break;
+		}
+
 		que_get_client(pool, &pget);
 		if(pget == NULL)
 		{		
 				printf("线程获取client lost\n");
 				break;
 		}	
-		//登录验证， 返回 user -id；
+		printf("thread-server取得任务\n");
+	//	recvn(pget->cfd, (char *)&status , sizeof(status));
 
-		recvn(pget->cfd, (char *)&status , sizeof(status));
+//		if(status == 0)
+//		{
+///			int user_id = client_log(pget->cfd);
+//			if(user_id == /-1)
+//			{
+///				free(pget);
+//				pget = NULL;
+///				break;
+//			}
+//		}
+		
 
-//		判断是否需要验证
-		if(status == 0)
-		{
-			int user_id = client_log(pget->cfd);
-			if(user_id == -1)
-			{
-				free(pget);
-				pget = NULL;
-				break;
-			}
-		}
-		/////////////拿到pget
-/*		int transfd = tcp_connect(pget->ip, pget->port);
-		if(transfd == -1)
-		{		
-				printf("%d connect trasn lost\n", pget->cfd);
-				break;
-		}
-		//pget->log_id = user_id;
-		
-		//////////建立传输管道
-		
-		int listenfd;
-		lisetenfd = tcp_init(conf->ip,pget->port);
-		if(listenfd == -1)
-		{
-			break;
-		}
-		
-*/		
-	
-			
-//		pargs args = NULL;
-		char cmdline[300] = {0};	
-		int len;
-		char *cmd;
-
+		printf("得到的 pget : %d\n", pget->cfd);
 		while(1)
 		{	
-		
-		//	bzero(cmd, 300);
-//			args = (pargs)malloc(sizeof(arg));
+			printf("通信符 %d\n", pget->cfd);
 			
-			recvn(pget->cfd, (char *)&len, sizeof(int));
-			
+			ret = recvn(pget->cfd, (char *)&len, sizeof(int));
+			if(ret == -1)
+				{
+					printf("recv lost thread\n");
+					break;
+				}
+			printf("命令 长度 ：%d\n", len);
+
 			if(recvn(pget->cfd, cmdline, len) == -1)
 			{
 				perror("server 接受命令失败");
 				pthread_exit(NULL);
 			}
+			printf("命令:%s\n",cmdline);
+
 			cmd = strtok(cmdline,  "\t");	
-		//	args->user_id = user_id;
-		//	cmd_parse(cmd, args);
-			/////////接受命令
+			if(cmd == NULL)
+			{
+				printf("no cmd\n");
+				break;
+
+				
+			}
+			printf("cmd:%s\n", cmd);
 			int val = 0;
 			val = cmd_val(cmd);		
 			switch(val)
 			{
 				case 1://ls
-				//		server_ls(args, transfd);		
 						break;
 				case 2://cd
-				//	    server_cd(args, transfd);	
 						break;
 				case 3://pwd
-				//		server_pwd(args, transfd);
 						break;
 				case 4://rm
-				//		server_rm(args, transfd);	
 						break;
 				case 5://gets
-				//		server_gets(args, transfd);
 						break;
 				case 6://puts
-				//		server_puts(args, transfd);
-				
 						break;
 				case 7:
 						file_size(pget->cfd);
 						break;
 				case 8:
 						rest_file(pget->cfd);
-				//		client_exit();
-					//	goto label
 						break;
 				case 9:
-				//		client_exit();
-					//	goto label
 						break;
 				default:
 						printf("命令不知名----\n");
 						break;
 			}
-			////////////////执行通信
-			
-		//	free(args);
-		//	args = NULL;
+
 		}
 		free(pget);
 		pget = NULL;
+		
 	}
-	label:
 
-//	pthread_cleanup_pop(0);
 }
 	
-//前置条件：统一客户端转化形式再发过来。
-
-
 void file_size(int sfd)
 {
+	int ret;
 	char *filename;
+	do{
+
 	filename = strtok(NULL, "\t");
-	do
+	if(filename == NULL)
 	{
-		struct stat st;
-		ret =  stat(filename, &st);
-		if(ret == -1)
-		{
-			perror();
-			break;
-		}
-		int filesize = st.st_size;
-		sendn(sfd, (char *)&filesize, sizeof(int));
+		printf("文件名为空\n");
+		break;
 	}
+	struct stat st;
+	ret =  stat(filename, &st);
+	if(ret == -1)
+	{
+		perror("stat");
+		break;
+	}
+	int filesize = st.st_size;
+	sendn(sfd, (char *)&filesize, sizeof(int));
+	}while(0);
 }
-//这其实完全是另外一个线程，仅仅适用于 只有下载的功能；
-//下载完运行退出程序；
 void rest_file(int sfd)
 {
 	char *filename;
@@ -464,28 +395,31 @@ void rest_file(int sfd)
 	{
 		filename = strtok(NULL, "\t");
 		if(filename == NULL)
+		
 		{
+			printf("文件名为空\n");
 			break;	
 		}
 		filesize = strtok(NULL, "\t");
 		if(filesize == NULL)
 		{
-
+			printf("文件名为空\n");
 			break;
 		}
 		fileoffset = strtok(NULL, "\t");
 		if(fileoffset == NULL)
 		{
-		
+			printf("fileoffset 为空\n");
 			break;
 		}
 
 		size = atoi(filesize);
 		offset = atoi(fileoffset);
-	
-		int fd = open(filename, O_RDONLY);
+		printf("down filename %s size :%d, offset %d\n",filename, size, offset);	
+		int fd = open(filename, O_RDWR);
 		if(-1 == fd)
 		{
+			perror("open");
 			break;
 		}
 		char * addr = mmap(NULL,size, PROT_READ, MAP_SHARED, fd, offset);
@@ -494,6 +428,7 @@ void rest_file(int sfd)
 			perror("mmap lost");
 			break;
 		}
+		close(fd);
 		int total = 0;
 		int len;
 		char buf[1000];
@@ -508,6 +443,8 @@ void rest_file(int sfd)
 			addr += len;
 			total += len;		
 		}
+		munmap(addr, size);
+
 	}while(0);
 }
 int cmd_val(char *cmd)
@@ -579,6 +516,8 @@ int  client_log(int sfd)//客户登录验证
 
 	recvn(sfd, user, len);
 
+	printf("username :%s\n", user);
+	
 	if((sp = getspnam(user)) == NULL)
 	{
 		printf("getspanam lost\n");
@@ -594,8 +533,10 @@ int  client_log(int sfd)//客户登录验证
 	recvn(sfd, (char *)&len, sizeof(int));
  
 	recvn(sfd, passwd, len);
+	printf("passwd: %s\n", passwd);
+
 	int flag = 0;
-	if(strcmp(sp->sp_pwdp, crypt(passwd, salt)) == 0)
+	if(strcmp((sp->sp_pwdp),(crypt(passwd, salt))) == 0)
 	{
 		printf("验证通过\n");
 		flag = 1;
@@ -610,11 +551,6 @@ int  client_log(int sfd)//客户登录验证
 	}
 }
 
-void threadpool_destroy()//销毁线城池
-{
-	
-	
-}
 
 int epoll_run(int sfd, pthreadpool pool)
 {	 
@@ -644,6 +580,11 @@ int epoll_run(int sfd, pthreadpool pool)
 						if(tcp_accept(sfd, pnew) == -1)
 						{
 							return -1;
+						}
+						if(pool == NULL )
+						{
+							printf("pool is NUL\n");
+							break;
 						}
 						que_insert_client(pool, pnew);
 						if(0)//////有待于写 退出形况 有可能 accpet 被中断。 返回 EINTER

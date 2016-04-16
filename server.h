@@ -23,23 +23,16 @@
 #include <shadow.h>
 #include <sys/mman.h>
 
-//#include "fun.h"
-
 typedef void *(*pfunc)(void *);
 typedef struct{
-	int logfd;
 	int port;
 	char ip[20];
 	int poolsize;
-	char logpath[20];
 }config, *pconfig;
 
 typedef struct client{
     int cfd;
 	int port;
-	//char *ip;
-//	int user_id;// 登录的用户 id；验证权限。
-//	int log_id;//写日志 的；
     struct client* pnext;
 }client, *pclient;
 
@@ -54,33 +47,28 @@ typedef struct{
     taskque clientque;
     int poolsize;
     pfunc client_handle;
-    int status;//0 close, 1 start
+    int status;
     pthread_cond_t empty;
     pthread_cond_t notempty;
 }threadpool, *pthreadpool;
 
-#define SUCCESS "success"
-#define FAILED "failed"
 #define LISTENNUM 20
 #define LOG_NAME "worklog.txt"
 
 pconfig conf;
 int fd;
+ssize_t sendn(int ,char *, int);
+ssize_t recvn(int , char* ,int);
 
-extern int tcp_init(const char *, int );
-extern int tcp_accept(int , pclient);
-//extern int tcp_connnect(const char *, int );
-//extern void signalhandler(void);
+int tcp_init(const char *, int );
+int tcp_accept(int , pclient);
 
-void threadpool_init(pthreadpool , int);
+void threadpool_init(pthreadpool* , int);
 void threadpool_start(pthreadpool);
-//int worklog_init(char *);
-void config_init(pconfig );
+void config_init(pconfig *);
 
-//void* CleanFunc(void *);
 void* thread_server(void *);
 int client_log(int );
-//void threadpool_destroy();
 int epoll_run(int , pthreadpool);
 int cmd_val(char *cmd);
 void get_salt(char *salt, char *passwd);
